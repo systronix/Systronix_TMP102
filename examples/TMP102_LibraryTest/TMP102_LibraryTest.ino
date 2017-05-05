@@ -285,8 +285,7 @@ void loop(void)
     Serial.print (" ");
   }
   
-  if (fake) Serial.print (temp, 
-  4);  // no rounding of simulated data
+  if (fake) Serial.print (temp, 4);  // no rounding of simulated data
   else Serial.print (temp, 4);       // 2 dec pts good enough for real data 0.0625 deg C per count
   
   Serial.print (" C ");

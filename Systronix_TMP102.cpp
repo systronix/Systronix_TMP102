@@ -39,6 +39,7 @@ void Systronix_TMP102::begin(void)
 //
 // Attempts to write the pointer register.  If successful, sets control.exists true, else false.
 //
+// TODO BUG fix: one exit, don't return without endTransmission!!!
 
 uint8_t Systronix_TMP102::init (uint16_t config)
 	{
