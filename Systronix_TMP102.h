@@ -86,8 +86,8 @@ if ADDR is SCL, address is 0x4B
 #define		TMP102_BASE_MIN 	0x48					// 7-bit address not including R/W bit
 #define		TMP102_BASE_MAX 	0x4B					// 7-bit address not including R/W bit
 
-#define		WR_INCOMPLETE		0
-#define		SILLY_PROGRAMMER	11
+#define		WR_INCOMPLETE		11
+#define		SILLY_PROGRAMMER	12
 
 
 /** --------  Register Addresses --------
@@ -189,7 +189,7 @@ class Systronix_TMP102
 		uint16_t	_tlow_reg = 0x04B0;					// power-on: 75C
 		uint16_t	_thigh_reg = 0x0500;				// power-on: 80C
 
-		void		tally_errors (uint8_t);				// maintains the i2c_t3 error counters
+		void		tally_transaction (uint8_t);		// maintains the i2c_t3 error counters
 
 	public:
 		// Instance-specific properties
@@ -213,10 +213,6 @@ class Systronix_TMP102
 		struct
 			{
 			boolean		exists;							// set false during init() if the device fails to communicate
-			} control;
-
-		struct
-			{
 			uint8_t		error_val;						// the most recent error value, not just SUCCESS or FAIL
 			uint32_t	incomplete_write_count;			// Wire.write failed to write all of the data to tx_buffer
 			uint32_t	data_len_error_count;			// data too long

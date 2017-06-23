@@ -18,12 +18,11 @@ uint8_t Systronix_TMP102::setup(uint8_t base)
 	{
 	if ((TMP102_BASE_MIN > base) || (TMP102_BASE_MAX < base))
 		{
-		tally_errors (SILLY_PROGRAMMER);
+		tally_transaction (SILLY_PROGRAMMER);
 		return FAIL;
 		}
 
 	_base = base;
-//	BaseAddr = base;
 	return SUCCESS;
 	}
 
@@ -52,15 +51,15 @@ uint8_t Systronix_TMP102::base_get(void)
 
 //---------------------------< I N I T >----------------------------------------------------------------------
 //
-// Attempts to write configuration register.  If successful, sets control.exists true, else false.
+// Attempts to write configuration register.  If successful, sets error.exists true, else false.
 //
 
 uint8_t Systronix_TMP102::init (uint16_t config)
 	{
-	control.exists = true;								// here, assume that the device exists
+	error.exists = true;								// here, assume that the device exists
 	if (SUCCESS != register_write (TMP102_CONF_REG_PTR, config))
 		{
-		control.exists = false;							// only place in this file where this is set false
+		error.exists = false;							// only place in this file where this is set false
 		return ABSENT;
 		}
 	return SUCCESS;
@@ -73,17 +72,18 @@ uint8_t Systronix_TMP102::init (uint16_t config)
 // counts them.
 //
 
-void Systronix_TMP102::tally_errors (uint8_t value)
+void Systronix_TMP102::tally_transaction (uint8_t value)
 	{
-	if (error.total_error_count < UINT64_MAX)
-		error.total_error_count++; 	// every time here incr total error count
+	if (value && (error.total_error_count < UINT64_MAX))
+		error.total_error_count++; 			// every time here incr total error count
 
 	error.error_val = value;
 
 	switch (value)
 		{
-		case WR_INCOMPLETE:					// Wire.write failed to write all of the data to tx_buffer
-			error.incomplete_write_count++;
+		case SUCCESS:
+			if (error.successful_count < UINT64_MAX)
+				error.successful_count++;
 			break;
 		case 1:								// i2c_t3 and Wire: data too long from endTransmission() (rx/tx buffers are 259 bytes - slave addr + 2 cmd bytes + 256 data)
 			error.data_len_error_count++;
@@ -114,7 +114,10 @@ void Systronix_TMP102::tally_errors (uint8_t value)
 		case I2C_SLAVE_RX:
 			error.other_error_count++;		// 9 & 10 from i2c_t3; these are not errors, I think
 			break;
-		case SILLY_PROGRAMMER:				// 11
+		case WR_INCOMPLETE:					// 11; Wire.write failed to write all of the data to tx_buffer
+			error.incomplete_write_count++;
+			break;
+		case SILLY_PROGRAMMER:				// 12
 			error.silly_programmer_error++;
 			break;
 		default:
@@ -140,7 +143,7 @@ void Systronix_TMP102::tally_errors (uint8_t value)
 
 float Systronix_TMP102::raw13ToC (uint16_t raw13)
 	{
-	uint8_t		shift = (raw13 & 1) ? 3 : 4;		// if extended mode shift 3, else shift 4
+	uint8_t		shift = (raw13 & 1) ? 3 : 4;			// if extended mode shift 3, else shift 4
 	return 0.0625 * ((int16_t)raw13 >> shift);
 	}
 
@@ -198,32 +201,30 @@ uint8_t Systronix_TMP102::pointer_write (uint8_t target_register)
 	{
 	uint8_t ret_val;
 
-	if (!control.exists)						// exit immediately if device does not exist
+	if (!error.exists)								// exit immediately if device does not exist
 		return ABSENT;
 
 	if (target_register > TMP102_THIGH_REG_PTR)
-		tally_errors(SILLY_PROGRAMMER);			// upper bits not fatal. We think.
+		tally_transaction (SILLY_PROGRAMMER);		// upper bits not fatal. We think.
 
 	Wire.beginTransmission (_base);
-	ret_val = Wire.write (target_register);	// returns # of bytes written to i2c_t3 buffer
+	ret_val = Wire.write (target_register);			// returns # of bytes written to i2c_t3 buffer
 	if (1 != ret_val)
 		{
-		tally_errors (WR_INCOMPLETE);			// only here we make 0 an error value
+		tally_transaction (WR_INCOMPLETE);			// only here we make 0 an error value
 		return FAIL;
 		}
 
-	ret_val = Wire.endTransmission ();			// endTransmission() returns 0 if successful
+	ret_val = Wire.endTransmission ();				// endTransmission() returns 0 if successful
   	if (SUCCESS != ret_val)
 		{
-		tally_errors (ret_val);					// increment the appropriate counter
-		return FAIL;							// calling function decides what to do with the error
+		tally_transaction (ret_val);				// increment the appropriate counter
+		return FAIL;								// calling function decides what to do with the error
 		}
 
-	_pointer_reg = target_register;				// remember where the pointer register is pointing
+	_pointer_reg = target_register;					// remember where the pointer register is pointing
 
-	if (error.successful_count < UINT64_MAX)
-		error.successful_count++;
-
+	tally_transaction (SUCCESS);
 	return SUCCESS;
 	}
 
@@ -239,11 +240,11 @@ uint8_t Systronix_TMP102::register_write (uint8_t target_register, uint16_t data
 	{
 	uint8_t ret_val;								// number of bytes written
 
-	if (!control.exists)							// exit immediately if device does not exist
+	if (!error.exists)								// exit immediately if device does not exist
 		return ABSENT;
 
 	if ((TMP102_TEMP_REG_PTR == target_register) || (TMP102_THIGH_REG_PTR < target_register))
-		tally_errors(SILLY_PROGRAMMER);				// upper bits not fatal. We think; only write to writable registers
+		tally_transaction (SILLY_PROGRAMMER);		// upper bits not fatal. We think; only write to writable registers
 
 	Wire.beginTransmission (_base);					// base address
 	ret_val = Wire.write (target_register);			// pointer in 2 lsb
@@ -252,14 +253,14 @@ uint8_t Systronix_TMP102::register_write (uint8_t target_register, uint16_t data
 
 	if (3 != ret_val)
 		{
-		tally_errors (WR_INCOMPLETE);				// increment the appropriate counter
+		tally_transaction (WR_INCOMPLETE);			// increment the appropriate counter
 		return FAIL;
 		}
 	
 	ret_val = Wire.endTransmission ();				// endTransmission() returns 0 if successful
   	if (SUCCESS != ret_val)
 		{
-		tally_errors (ret_val);						// increment the appropriate counter
+		tally_transaction (ret_val);				// increment the appropriate counter
 		return FAIL;								// calling function decides what to do with the error
 		}
 
@@ -272,9 +273,7 @@ uint8_t Systronix_TMP102::register_write (uint8_t target_register, uint16_t data
 	else if (TMP102_THIGH_REG_PTR == target_register)
 		_thigh_reg = data;
 
-	if (error.successful_count < UINT64_MAX)
-		error.successful_count++;
-
+	tally_transaction (SUCCESS);
 	return SUCCESS;
 	}
 
@@ -290,13 +289,13 @@ uint8_t Systronix_TMP102::register_read (uint16_t *data)
 	{
 	uint8_t ret_val;
 	
-	if (!control.exists)							// exit immediately if device does not exist
+	if (!error.exists)								// exit immediately if device does not exist
 		return ABSENT;
 
 	if (2 != Wire.requestFrom(_base, 2, I2C_STOP))
 		{
 		ret_val = Wire.status();					// to get error value
-		tally_errors (ret_val);						// increment the appropriate counter
+		tally_transaction (ret_val);						// increment the appropriate counter
 		return FAIL;
 		}
 
