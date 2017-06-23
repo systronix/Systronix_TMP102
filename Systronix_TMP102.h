@@ -83,6 +83,13 @@ if ADDR is SCL, address is 0x4B
 #define		FAIL	(~SUCCESS)
 #define		ABSENT	0xFD
 
+#define		TMP102_BASE_MIN 	0x48					// 7-bit address not including R/W bit
+#define		TMP102_BASE_MAX 	0x4B					// 7-bit address not including R/W bit
+
+#define		WR_INCOMPLETE		0
+#define		SILLY_PROGRAMMER	11
+
+
 /** --------  Register Addresses --------
 The two lsb of the pointer register hold the register bits, which
 are used to address one of the four directly-accessible registers.
@@ -176,7 +183,12 @@ class Systronix_TMP102
 {
 	protected:
 		uint8_t		_base;								// base address for this instance; four possible values
-		uint8_t		_pointer_reg;						// copy of the pointer register value so we know where it's pointing
+														// private copies of these register values
+		uint8_t		_pointer_reg = TMP102_TEMP_REG_PTR;	// power-on: temperature register
+		uint16_t	_config_reg = 0x60A0;				// power-on: 4Hz, 12-bit mode
+		uint16_t	_tlow_reg = 0x04B0;					// power-on: 75C
+		uint16_t	_thigh_reg = 0x0500;				// power-on: 80C
+
 		void		tally_errors (uint8_t);				// maintains the i2c_t3 error counters
 
 	public:
@@ -200,29 +212,39 @@ class Systronix_TMP102
 
 		struct
 			{
-			uint8_t		ret_val;						// i2c_t3 library return value from most recent transaction
-			uint32_t	incomplete_write_count;			// Wire.write failed to write all of the data to tx_buffer
-			uint32_t	data_len_error_count;			// data too long
-			uint32_t	rcv_addr_nack_count;			// slave did not ack address
-			uint32_t	rcv_data_nack_count;			// slave did not ack data
-			uint32_t	other_error_count;				// arbitration lost or timeout
-			boolean		exists;							// set false after an unsuccessful i2c transaction
+			boolean		exists;							// set false during init() if the device fails to communicate
 			} control;
 
-		uint8_t BaseAddr;
-														// i2c_t3 error counters
+		struct
+			{
+			uint8_t		error_val;						// the most recent error value, not just SUCCESS or FAIL
+			uint32_t	incomplete_write_count;			// Wire.write failed to write all of the data to tx_buffer
+			uint32_t	data_len_error_count;			// data too long
+			uint32_t	timeout_count;					// slave response took too long
+			uint32_t	rcv_addr_nack_count;			// slave did not ack address
+			uint32_t	rcv_data_nack_count;			// slave did not ack data
+			uint32_t	arbitration_lost_count;
+			uint32_t	buffer_overflow_count;
+			uint32_t	other_error_count;				// from endTransmission there is "other" error
+			uint32_t	unknown_error_count;
+			uint32_t	data_value_error_count;			// I2C message OK but value read was wrong; how can this be?
+			uint32_t	silly_programmer_error;			// I2C address to big or something else that "should never happen"
+			uint64_t	total_error_count;				// quick check to see if any have happened
+			uint64_t	successful_count;				// successful access cycle
+			} error;
 
-		void		setup (uint8_t base);				// constructor
+		uint8_t		setup (uint8_t base);				// constructor
 		void		begin (void);
 		uint8_t		init (uint16_t);					// device present and communicating detector
+		uint8_t		base_get(void);
 
 		float		raw13ToC (uint16_t raw13);			// temperature conversion functions
 		float		raw13_to_F (uint16_t raw13);
 		uint8_t		get_temperature_data (void);
 
-		uint8_t		writePointer (uint8_t pointer);		// i2c bus dependent functions
-		uint8_t		writeRegister (uint8_t pointer, uint16_t data);
-		uint8_t		readRegister (uint16_t *data);
+		uint8_t		pointer_write (uint8_t target_register);		// i2c bus dependent functions
+		uint8_t		register_write (uint8_t target_register, uint16_t data);
+		uint8_t		register_read (uint16_t *data);
 
 		uint8_t		readTempDegC (float *tempC);		// these functions not yet implemented; all return FAIL
 		uint8_t		degCToRaw13 (uint16_t *raw13, float *tempC);
