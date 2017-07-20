@@ -167,24 +167,25 @@ float Systronix_TMP102::raw13_to_F (uint16_t raw13)
 uint8_t Systronix_TMP102::get_temperature_data (void)
 	{
 	uint8_t ret_val;
-	
+
 	if (TMP102_TEMP_REG_PTR != _pointer_reg)			// if not pointed at temperature register
 		{
 		ret_val = pointer_write (TMP102_TEMP_REG_PTR);	// attempt to point it
 		if (SUCCESS != ret_val)
 			return ret_val;								// attempt failed; quit
 		}
-	
+
 	ret_val = register_read (&data.raw_temp);			// attempt to read the temperature
 	if (SUCCESS != ret_val)
 		return ret_val;									// attempt failed; quit
-	
+
 	data.t_high = max((int16_t)data.raw_temp, (int16_t)data.t_high);	// keep track of min/max temperatures
 	data.t_low = min((int16_t)data.t_low, (int16_t)data.raw_temp);
 
 	data.deg_c = raw13ToC (data.raw_temp);				// convert to human-readable forms
 	data.deg_f = raw13_to_F (data.raw_temp);
-	
+
+	data.fresh = true;									// identify the current data set as new and fresh
 	return SUCCESS;
 	}
 

@@ -200,7 +200,7 @@ class Systronix_TMP102
 		
 		Maybe different structs for data values and part control
 		**/
-		struct
+		struct data_t
 			{
 			uint16_t	raw_temp;						// most recent
 			uint16_t	t_high = 0xE480;				// preset to minimum temperature value (-55C in raw13 format)
