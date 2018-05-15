@@ -5,7 +5,7 @@
  *	  Author: BAB
  */
 
-#include <Systronix_TMP102.h>	
+#include <Systronix_TMP102.h>
 
 //---------------------------< S E T U P >--------------------------------------------------------------------
 /*!
@@ -18,7 +18,7 @@ uint8_t Systronix_TMP102::setup(uint8_t base)
 	{
 	if ((TMP102_BASE_MIN > base) || (TMP102_BASE_MAX < base))
 		{
-		tally_transaction (SILLY_PROGRAMMER);
+		i2c_common.tally_transaction (SILLY_PROGRAMMER, &error);
 		return FAIL;
 		}
 
@@ -63,67 +63,6 @@ uint8_t Systronix_TMP102::init (uint16_t config)
 		return ABSENT;
 		}
 	return SUCCESS;
-	}
-
-
-//---------------------------< T A L L Y _ E R R O R S >------------------------------------------------------
-//
-// Here we tally errors.  This does not answer the 'what to do in the event of these errors' question; it just
-// counts them.
-//
-
-void Systronix_TMP102::tally_transaction (uint8_t value)
-	{
-	if (value && (error.total_error_count < UINT64_MAX))
-		error.total_error_count++; 			// every time here incr total error count
-
-	error.error_val = value;
-
-	switch (value)
-		{
-		case SUCCESS:
-			if (error.successful_count < UINT64_MAX)
-				error.successful_count++;
-			break;
-		case 1:								// i2c_t3 and Wire: data too long from endTransmission() (rx/tx buffers are 259 bytes - slave addr + 2 cmd bytes + 256 data)
-			error.data_len_error_count++;
-			break;
-#if defined I2C_T3_H
-		case I2C_TIMEOUT:
-			error.timeout_count++;			// 4 from i2c_t3; timeout from call to status() (read)
-#else
-		case 4:
-			error.other_error_count++;		// i2c_t3 and Wire: from endTransmission() "other error"
-#endif
-			break;
-		case 2:								// i2c_t3 and Wire: from endTransmission()
-		case I2C_ADDR_NAK:					// 5 from i2c_t3
-			error.rcv_addr_nack_count++;
-			break;
-		case 3:								// i2c_t3 and Wire: from endTransmission()
-		case I2C_DATA_NAK:					// 6 from i2c_t3
-			error.rcv_data_nack_count++;
-			break;
-		case I2C_ARB_LOST:					// 7 from i2c_t3; arbitration lost from call to status() (read)
-			error.arbitration_lost_count++;
-			break;
-		case I2C_BUF_OVF:
-			error.buffer_overflow_count++;
-			break;
-		case I2C_SLAVE_TX:
-		case I2C_SLAVE_RX:
-			error.other_error_count++;		// 9 & 10 from i2c_t3; these are not errors, I think
-			break;
-		case WR_INCOMPLETE:					// 11; Wire.write failed to write all of the data to tx_buffer
-			error.incomplete_write_count++;
-			break;
-		case SILLY_PROGRAMMER:				// 12
-			error.silly_programmer_error++;
-			break;
-		default:
-			error.unknown_error_count++;
-			break;
-		}
 	}
 
 
@@ -206,26 +145,26 @@ uint8_t Systronix_TMP102::pointer_write (uint8_t target_register)
 		return ABSENT;
 
 	if (target_register > TMP102_THIGH_REG_PTR)
-		tally_transaction (SILLY_PROGRAMMER);		// upper bits not fatal. We think.
+		i2c_common.tally_transaction (SILLY_PROGRAMMER, &error);		// upper bits not fatal. We think.
 
 	Wire.beginTransmission (_base);
 	ret_val = Wire.write (target_register);			// returns # of bytes written to i2c_t3 buffer
 	if (1 != ret_val)
 		{
-		tally_transaction (WR_INCOMPLETE);			// only here we make 0 an error value
+		i2c_common.tally_transaction (WR_INCOMPLETE, &error);			// only here we make 0 an error value
 		return FAIL;
 		}
 
 	ret_val = Wire.endTransmission ();				// endTransmission() returns 0 if successful
   	if (SUCCESS != ret_val)
 		{
-		tally_transaction (ret_val);				// increment the appropriate counter
+		i2c_common.tally_transaction (ret_val, &error);				// increment the appropriate counter
 		return FAIL;								// calling function decides what to do with the error
 		}
 
 	_pointer_reg = target_register;					// remember where the pointer register is pointing
 
-	tally_transaction (SUCCESS);
+	i2c_common.tally_transaction (SUCCESS, &error);
 	return SUCCESS;
 	}
 
@@ -245,7 +184,7 @@ uint8_t Systronix_TMP102::register_write (uint8_t target_register, uint16_t data
 		return ABSENT;
 
 	if ((TMP102_TEMP_REG_PTR == target_register) || (TMP102_THIGH_REG_PTR < target_register))
-		tally_transaction (SILLY_PROGRAMMER);		// upper bits not fatal. We think; only write to writable registers
+		i2c_common.tally_transaction (SILLY_PROGRAMMER, &error);		// upper bits not fatal. We think; only write to writable registers
 
 	Wire.beginTransmission (_base);					// base address
 	ret_val = Wire.write (target_register);			// pointer in 2 lsb
@@ -254,14 +193,14 @@ uint8_t Systronix_TMP102::register_write (uint8_t target_register, uint16_t data
 
 	if (3 != ret_val)
 		{
-		tally_transaction (WR_INCOMPLETE);			// increment the appropriate counter
+		i2c_common.tally_transaction (WR_INCOMPLETE, &error);			// increment the appropriate counter
 		return FAIL;
 		}
-	
+
 	ret_val = Wire.endTransmission ();				// endTransmission() returns 0 if successful
   	if (SUCCESS != ret_val)
 		{
-		tally_transaction (ret_val);				// increment the appropriate counter
+		i2c_common.tally_transaction (ret_val, &error);				// increment the appropriate counter
 		return FAIL;								// calling function decides what to do with the error
 		}
 
@@ -274,7 +213,7 @@ uint8_t Systronix_TMP102::register_write (uint8_t target_register, uint16_t data
 	else if (TMP102_THIGH_REG_PTR == target_register)
 		_thigh_reg = data;
 
-	tally_transaction (SUCCESS);
+	i2c_common.tally_transaction (SUCCESS, &error);
 	return SUCCESS;
 	}
 
@@ -289,19 +228,20 @@ uint8_t Systronix_TMP102::register_write (uint8_t target_register, uint16_t data
 uint8_t Systronix_TMP102::register_read (uint16_t *data)
 	{
 	uint8_t ret_val;
-	
+
 	if (!error.exists)								// exit immediately if device does not exist
 		return ABSENT;
 
 	if (2 != Wire.requestFrom(_base, 2, I2C_STOP))
 		{
 		ret_val = Wire.status();					// to get error value
-		tally_transaction (ret_val);						// increment the appropriate counter
+		i2c_common.tally_transaction (ret_val, &error);						// increment the appropriate counter
 		return FAIL;
 		}
 
 	*data = (uint16_t)Wire.read() << 8;
 	*data |= (uint16_t)Wire.read();
+	i2c_common.tally_transaction (SUCCESS, &error);
 	return SUCCESS;
 	}
 

@@ -72,22 +72,10 @@ if ADDR is SCL, address is 0x4B
 -------------------------------------*/
 
 #include <Arduino.h>
-
-#if defined (__MK20DX256__) || defined (__MK20DX128__) 	// Teensy 3.1 or 3.2 || Teensy 3.0
-#include <i2c_t3.h>		
-#else
-#include <Wire.h>	// for AVR I2C library
-#endif
-
-#define		SUCCESS	0
-#define		FAIL	(~SUCCESS)
-#define		ABSENT	0xFD
+#include <Systronix_i2c_common.h>
 
 #define		TMP102_BASE_MIN 	0x48					// 7-bit address not including R/W bit
 #define		TMP102_BASE_MAX 	0x4B					// 7-bit address not including R/W bit
-
-#define		WR_INCOMPLETE		11
-#define		SILLY_PROGRAMMER	12
 
 
 /** --------  Register Addresses --------
@@ -189,8 +177,6 @@ class Systronix_TMP102
 		uint16_t	_tlow_reg = 0x04B0;					// power-on: 75C
 		uint16_t	_thigh_reg = 0x0500;				// power-on: 80C
 
-		void		tally_transaction (uint8_t);		// maintains the i2c_t3 error counters
-
 	public:
 		// Instance-specific properties
 		/** Data for one instance of a TMP102 temp sensor.
@@ -210,24 +196,7 @@ class Systronix_TMP102
 			bool		fresh;							// data is good and fresh TODO: how does one know that the data are not 'fresh'?
 			} data;
 
-		struct
-			{
-			boolean		exists;							// set false during init() if the device fails to communicate
-			uint8_t		error_val;						// the most recent error value, not just SUCCESS or FAIL
-			uint32_t	incomplete_write_count;			// Wire.write failed to write all of the data to tx_buffer
-			uint32_t	data_len_error_count;			// data too long
-			uint32_t	timeout_count;					// slave response took too long
-			uint32_t	rcv_addr_nack_count;			// slave did not ack address
-			uint32_t	rcv_data_nack_count;			// slave did not ack data
-			uint32_t	arbitration_lost_count;
-			uint32_t	buffer_overflow_count;
-			uint32_t	other_error_count;				// from endTransmission there is "other" error
-			uint32_t	unknown_error_count;
-			uint32_t	data_value_error_count;			// I2C message OK but value read was wrong; how can this be?
-			uint32_t	silly_programmer_error;			// I2C address to big or something else that "should never happen"
-			uint64_t	total_error_count;				// quick check to see if any have happened
-			uint64_t	successful_count;				// successful access cycle
-			} error;
+		error_t		error;								// error struct typdefed in Systronix_i2c_common.h
 
 		uint8_t		setup (uint8_t base);				// constructor
 		void		begin (void);
